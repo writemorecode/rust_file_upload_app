@@ -1,22 +1,12 @@
-use actix_multipart::form::{tempfile::TempFile, MultipartForm};
 use actix_web::middleware::Logger;
-use actix_web::{post, App, HttpResponse, HttpServer, Responder};
+use actix_web::{App, HttpServer};
 
 use env_logger::Env;
 use std::env;
 
-#[derive(Debug, MultipartForm)]
-struct UploadForm {
-    #[multipart(limit = "100MB")]
-    file: TempFile,
-}
+mod upload;
 
-#[post("/upload")]
-async fn file_upload(MultipartForm(form): MultipartForm<UploadForm>) -> impl Responder {
-    let path = format!("uploads/{}", form.file.file_name.unwrap());
-    form.file.file.persist(&path).unwrap();
-    HttpResponse::Ok()
-}
+use upload::file_upload;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
