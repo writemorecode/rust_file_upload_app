@@ -10,12 +10,14 @@ use std::path::PathBuf;
 #[derive(Debug, Serialize, Deserialize)]
 struct FileObject {
     uuid: Uuid,
+    original_filename: String,
 }
 
 impl FileObject {
-    fn new() -> Self {
+    fn new(original_filename: String) -> Self {
         Self {
             uuid: Uuid::new_v4(),
+            original_filename,
         }
     }
 }
@@ -46,12 +48,15 @@ impl AppState {
 pub async fn file_upload(
     app_data: web::Data<AppState>,
     MultipartForm(form): MultipartForm<UploadForm>,
-) -> impl Responder {
-    let response = FileObject::new();
-
+) -> actix_web::Result<impl Responder> {
     form.file.file.persist(&app_data.upload_path).unwrap();
 
-    HttpResponse::Ok().json(response)
+    let original_filename = form.file.file_name;
+    let response = match original_filename {
+        Some(name) => HttpResponse::Ok().json(FileObject::new(name)),
+        None => HttpResponse::BadRequest().body("The uploaded file must have a filename."),
+    };
+    Ok(response)
 }
 
 #[cfg(test)]
@@ -61,7 +66,7 @@ mod tests {
     use tempdir::TempDir;
 
     #[test]
-    fn appstate_from_existing_directory() {
+    fn can_create_appstate_from_existing_directory() {
         let upload_dir = TempDir::new("uploads").unwrap();
         let upload_dir_name = upload_dir.path().to_str().unwrap();
         let state = AppState::new(upload_dir_name);
@@ -69,7 +74,7 @@ mod tests {
     }
 
     #[test]
-    fn appstate_from_nonexistent_directory() {
+    fn cannot_create_appstate_from_nonexistent_directory() {
         let upload_dir_name = "does_not_exist";
         let state = AppState::new(upload_dir_name);
         assert!(state.is_err());

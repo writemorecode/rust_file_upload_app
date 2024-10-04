@@ -3,9 +3,6 @@ use actix_web::{App, HttpServer};
 
 use env_logger::Env;
 
-use std::env;
-use std::path::PathBuf;
-
 use crate::upload::file_upload;
 
 pub mod upload;
