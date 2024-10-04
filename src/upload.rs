@@ -49,13 +49,15 @@ pub async fn file_upload(
     app_data: web::Data<AppState>,
     MultipartForm(form): MultipartForm<UploadForm>,
 ) -> actix_web::Result<impl Responder> {
-    form.file.file.persist(&app_data.upload_path).unwrap();
-
-    let original_filename = form.file.file_name;
-    let response = match original_filename {
-        Some(name) => HttpResponse::Ok().json(FileObject::new(name)),
-        None => HttpResponse::BadRequest().body("The uploaded file must have a filename."),
+    let Some(original_filename) = form.file.file_name else {
+        return Ok(HttpResponse::BadRequest().body("The uploaded file must have a filename."));
     };
+    let file_object = FileObject::new(original_filename);
+    let file_path = app_data.upload_path.join(file_object.uuid.to_string());
+    if let Err(err) = form.file.file.persist(&file_path) {
+        return Ok(HttpResponse::InternalServerError().body(err.to_string()));
+    }
+    let response = HttpResponse::Ok().json(file_object);
     Ok(response)
 }
 
