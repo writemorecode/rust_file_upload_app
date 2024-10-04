@@ -1,25 +1,19 @@
 use actix_multipart::form::{tempfile::TempFile, MultipartForm};
 use actix_web::{post, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
-use std::fmt;
+//use std::fmt;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
-struct FileUploadResponse {
+struct FileObject {
     uuid: Uuid,
 }
 
-impl FileUploadResponse {
+impl FileObject {
     fn new() -> Self {
         Self {
             uuid: Uuid::new_v4(),
         }
-    }
-}
-
-impl fmt::Display for FileUploadResponse {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.uuid)
     }
 }
 
@@ -31,12 +25,11 @@ struct UploadForm {
 
 #[post("/upload")]
 pub async fn file_upload(MultipartForm(form): MultipartForm<UploadForm>) -> impl Responder {
-    let response = FileUploadResponse::new();
+    let response = FileObject::new();
 
     // TODO: Use proper path joining here
     // TODO: Store name/path of upload dir in shared app state
-    let path = format!("uploads/{}", response);
-    println!("'{}' => '{}'", form.file.file_name.unwrap(), response.uuid);
+    let path = format!("uploads/{}", response.uuid);
     form.file.file.persist(&path).unwrap();
 
     HttpResponse::Ok().json(response)
