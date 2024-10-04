@@ -2,35 +2,28 @@ use actix_web::middleware::Logger;
 use actix_web::{App, HttpServer};
 
 use env_logger::Env;
+
 use std::env;
+use std::path::PathBuf;
 
-mod upload;
+use crate::upload::file_upload;
 
-use upload::file_upload;
-
-use std::io::ErrorKind;
+pub mod upload;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    const UPLOAD_DIRECTORY_NAME: &str = "uploads";
-    let cwd_path = env::current_dir()?;
-    let upload_directory_path = cwd_path.join(UPLOAD_DIRECTORY_NAME);
-    println!("Current directory: {}", cwd_path.display());
-    println!("Upload directory: {}", upload_directory_path.display());
-
-    let mkdir_result = std::fs::create_dir(upload_directory_path);
-    match mkdir_result {
-        Err(ref err) if err.kind() == ErrorKind::AlreadyExists => {}
-        Err(err) => {
-            return Err(err);
-        }
-        _ => {}
-    }
-
     env_logger::init_from_env(Env::default().default_filter_or("info"));
 
-    HttpServer::new(|| App::new().wrap(Logger::default()).service(file_upload))
-        .bind(("::1", 5000))?
-        .run()
-        .await
+    const UPLOAD_DIRECTORY_NAME: &str = "uploads";
+    let app_state = upload::AppState::new(UPLOAD_DIRECTORY_NAME)?;
+
+    HttpServer::new(move || {
+        App::new()
+            .wrap(Logger::default())
+            .app_data(app_state.clone())
+            .service(file_upload)
+    })
+    .bind(("::1", 5000))?
+    .run()
+    .await
 }
