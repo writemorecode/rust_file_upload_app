@@ -3,6 +3,7 @@ use actix_web::web;
 use actix_web::{App, HttpServer};
 
 use env_logger::Env;
+use upload::healthcheck;
 
 use crate::upload::file_upload;
 
@@ -14,13 +15,14 @@ async fn main() -> std::io::Result<()> {
     env_logger::init_from_env(Env::default().default_filter_or("info"));
 
     const UPLOAD_DIRECTORY_NAME: &str = "uploads";
-    let app_state = upload::AppState::new(UPLOAD_DIRECTORY_NAME)?;
+    let app_state = upload::appstate::AppState::new(UPLOAD_DIRECTORY_NAME)?;
     dbg!(&app_state);
 
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
             .app_data(web::Data::new(app_state.clone()))
+            .service(healthcheck)
             .service(file_upload)
     })
     .bind(("::1", 5000))?

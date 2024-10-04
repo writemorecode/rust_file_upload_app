@@ -1,11 +1,8 @@
 use actix_multipart::form::{tempfile::TempFile, MultipartForm};
 use actix_web::web;
-use actix_web::{post, HttpResponse, Responder};
+use actix_web::{get, post, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-
-use std::env;
-use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct FileObject {
@@ -28,25 +25,52 @@ struct UploadForm {
     file: TempFile,
 }
 
-#[derive(Clone, Debug)]
-pub struct AppState {
-    upload_path: PathBuf,
-}
-impl AppState {
-    pub fn new(upload_directory_name: &str) -> std::io::Result<AppState> {
-        let cwd = env::current_dir()?;
-        let upload_path = cwd.join(upload_directory_name);
-        match upload_path.try_exists() {
-            Ok(true) => Ok(AppState { upload_path }),
-            Ok(false) => Err(std::io::ErrorKind::NotFound.into()),
-            Err(err) => Err(err),
+pub mod appstate {
+    use std::env;
+    use std::path::PathBuf;
+
+    #[derive(Clone, Debug)]
+    pub struct AppState {
+        pub upload_path: PathBuf,
+    }
+    impl AppState {
+        pub fn new(upload_directory_name: &str) -> std::io::Result<AppState> {
+            let cwd = env::current_dir()?;
+            let upload_path = cwd.join(upload_directory_name);
+            match upload_path.try_exists() {
+                Ok(true) => Ok(AppState { upload_path }),
+                Ok(false) => Err(std::io::ErrorKind::NotFound.into()),
+                Err(err) => Err(err),
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        use tempdir::TempDir;
+
+        #[test]
+        fn can_create_appstate_from_existing_directory() {
+            let upload_dir = TempDir::new("uploads").unwrap();
+            let upload_dir_name = upload_dir.path().to_str().unwrap();
+            let state = AppState::new(upload_dir_name);
+            assert!(state.is_ok());
+        }
+
+        #[test]
+        fn cannot_create_appstate_from_nonexistent_directory() {
+            let upload_dir_name = "does_not_exist";
+            let state = AppState::new(upload_dir_name);
+            assert!(state.is_err());
         }
     }
 }
 
 #[post("/upload")]
 pub async fn file_upload(
-    app_data: web::Data<AppState>,
+    app_data: web::Data<appstate::AppState>,
     MultipartForm(form): MultipartForm<UploadForm>,
 ) -> actix_web::Result<impl Responder> {
     let Some(original_filename) = form.file.file_name else {
@@ -61,24 +85,21 @@ pub async fn file_upload(
     Ok(response)
 }
 
+#[get("/health")]
+pub async fn healthcheck() -> impl Responder {
+    HttpResponse::Ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use tempdir::TempDir;
-
-    #[test]
-    fn can_create_appstate_from_existing_directory() {
-        let upload_dir = TempDir::new("uploads").unwrap();
-        let upload_dir_name = upload_dir.path().to_str().unwrap();
-        let state = AppState::new(upload_dir_name);
-        assert!(state.is_ok());
-    }
+    use actix_web::{test, App};
 
     #[test]
-    fn cannot_create_appstate_from_nonexistent_directory() {
-        let upload_dir_name = "does_not_exist";
-        let state = AppState::new(upload_dir_name);
-        assert!(state.is_err());
+    async fn passes_healthcheck() {
+        let app = test::init_service(App::new().service(healthcheck)).await;
+        let req = test::TestRequest::get().uri("/health").to_request();
+        let res = test::call_service(&app, req).await;
+        assert!(res.status().is_success());
     }
 }
