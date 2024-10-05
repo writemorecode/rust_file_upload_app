@@ -1,22 +1,25 @@
 use actix_multipart::form::{tempfile::TempFile, MultipartForm};
-use actix_web::web;
+use actix_web::{get, web};
 use actix_web::{post, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use uuid::Uuid;
+
+use chrono::prelude::*;
 
 use crate::file_upload_service::appstate;
 
-#[derive(Debug, Serialize, Deserialize)]
-struct FileObject {
-    uuid: Uuid,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FileObject {
     original_filename: String,
+    date_created: DateTime<Utc>,
 }
 
 impl FileObject {
     fn new(original_filename: String) -> Self {
         Self {
-            uuid: Uuid::new_v4(),
             original_filename,
+            date_created: Utc::now(),
         }
     }
 }
@@ -35,12 +38,35 @@ pub async fn file_upload(
     let Some(original_filename) = form.file.file_name else {
         return Ok(HttpResponse::BadRequest().body("The uploaded file must have a filename."));
     };
+
+    let uuid = Uuid::new_v4();
     let file_object = FileObject::new(original_filename);
-    let file_path = app_data.upload_path.join(file_object.uuid.to_string());
+    app_data
+        .file_table
+        .write()
+        .unwrap()
+        .insert(uuid, file_object);
+
+    let file_path = app_data.upload_path.join(uuid.to_string());
     if let Err(err) = form.file.file.persist(&file_path) {
         return Ok(HttpResponse::InternalServerError().body(err.to_string()));
     }
-    let response = HttpResponse::Ok().json(file_object);
+    let response = HttpResponse::Created().json(json!({"uuid":uuid}));
+    Ok(response)
+}
+
+#[get("/upload/{uuid}")]
+pub async fn file_query(
+    app_data: web::Data<appstate::AppState>,
+    path: web::Path<Uuid>,
+) -> actix_web::Result<impl Responder> {
+    let uuid = path.into_inner();
+    let table = app_data.file_table.read().unwrap();
+    let found = table.get(&uuid);
+    let response = match found {
+        Some(file_object) => HttpResponse::Found().json(file_object),
+        None => HttpResponse::NotFound().body("File not found"),
+    };
     Ok(response)
 }
 
@@ -51,7 +77,7 @@ mod tests {
     use actix_multipart::test::create_form_data_payload_and_headers;
     use actix_web::test::TestRequest;
     use actix_web::web::Bytes;
-    use actix_web::{test, App};
+    use actix_web::{http, test, App};
     use appstate::AppState;
     use mime;
 
@@ -80,5 +106,6 @@ mod tests {
             .to_request();
         let res = test::call_service(&app, req).await;
         assert!(res.status().is_success());
+        assert_eq!(res.status(), http::StatusCode::OK);
     }
 }

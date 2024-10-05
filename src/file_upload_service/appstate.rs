@@ -1,18 +1,29 @@
 use std::env;
 use std::path::PathBuf;
 
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+
 use tempdir::TempDir;
+
+use uuid::Uuid;
+
+use crate::file_upload_service::upload::FileObject;
 
 #[derive(Clone, Debug)]
 pub struct AppState {
     pub upload_path: PathBuf,
+    pub file_table: Arc<RwLock<HashMap<Uuid, FileObject>>>,
 }
 impl AppState {
     pub fn new(upload_directory_name: &str) -> std::io::Result<AppState> {
         let cwd = env::current_dir()?;
         let upload_path = cwd.join(upload_directory_name);
         match upload_path.try_exists() {
-            Ok(true) => Ok(AppState { upload_path }),
+            Ok(true) => Ok(AppState {
+                upload_path,
+                file_table: Arc::new(RwLock::new(HashMap::new())),
+            }),
             Ok(false) => Err(std::io::ErrorKind::NotFound.into()),
             Err(err) => Err(err),
         }
@@ -22,6 +33,7 @@ impl AppState {
         let upload_path = TempDir::new("").unwrap();
         AppState {
             upload_path: upload_path.path().to_path_buf(),
+            file_table: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }

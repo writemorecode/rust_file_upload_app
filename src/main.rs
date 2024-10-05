@@ -1,3 +1,5 @@
+use std::env;
+
 use actix_web::middleware::Logger;
 use actix_web::web;
 use actix_web::{get, App, HttpResponse, HttpServer, Responder};
@@ -5,6 +7,8 @@ use actix_web::{get, App, HttpResponse, HttpServer, Responder};
 use env_logger::Env;
 
 pub mod file_upload_service;
+
+use file_upload_service::appstate::AppState;
 
 #[get("/health")]
 pub async fn healthcheck() -> impl Responder {
@@ -31,7 +35,11 @@ async fn main() -> std::io::Result<()> {
     env_logger::init_from_env(Env::default().default_filter_or("info"));
 
     const UPLOAD_DIRECTORY_NAME: &str = "uploads";
-    let app_state = file_upload_service::appstate::AppState::new(UPLOAD_DIRECTORY_NAME)?;
+    let cwd = env::current_dir()?;
+    let upload_directory_path = cwd.join(UPLOAD_DIRECTORY_NAME);
+    std::fs::create_dir_all(upload_directory_path)?;
+
+    let app_state = AppState::new(UPLOAD_DIRECTORY_NAME)?;
 
     HttpServer::new(move || {
         App::new()
@@ -39,6 +47,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(app_state.clone()))
             .service(healthcheck)
             .service(file_upload_service::upload::file_upload)
+            .service(file_upload_service::upload::file_query)
     })
     .bind(("::1", 5000))?
     .workers(1)
