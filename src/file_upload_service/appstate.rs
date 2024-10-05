@@ -1,6 +1,8 @@
 use std::env;
 use std::path::PathBuf;
 
+use tempdir::TempDir;
+
 #[derive(Clone, Debug)]
 pub struct AppState {
     pub upload_path: PathBuf,
@@ -13,6 +15,13 @@ impl AppState {
             Ok(true) => Ok(AppState { upload_path }),
             Ok(false) => Err(std::io::ErrorKind::NotFound.into()),
             Err(err) => Err(err),
+        }
+    }
+
+    pub fn new_temporary() -> AppState {
+        let upload_path = TempDir::new("").unwrap();
+        AppState {
+            upload_path: upload_path.path().to_path_buf(),
         }
     }
 }

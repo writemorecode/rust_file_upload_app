@@ -43,3 +43,42 @@ pub async fn file_upload(
     let response = HttpResponse::Ok().json(file_object);
     Ok(response)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use actix_multipart::test::create_form_data_payload_and_headers;
+    use actix_web::test::TestRequest;
+    use actix_web::web::Bytes;
+    use actix_web::{test, App};
+    use appstate::AppState;
+    use mime;
+
+    #[test]
+    async fn test_file_upload() {
+        let app_state = AppState::new_temporary();
+        std::fs::create_dir_all(&app_state.upload_path).unwrap();
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(app_state))
+                .service(file_upload),
+        )
+        .await;
+        let (body, headers) = create_form_data_payload_and_headers(
+            "file",
+            Some("lorem.txt".to_owned()),
+            Some(mime::TEXT_PLAIN),
+            Bytes::from_static(b"Lorem ipsum."),
+        );
+        let req = TestRequest::post().uri("/upload");
+        let req = headers
+            .into_iter()
+            .fold(req, |req, hdr| req.insert_header(hdr))
+            .set_payload(body)
+            .to_request();
+        let res = test::call_service(&app, req).await;
+        assert!(res.status().is_success());
+    }
+}
